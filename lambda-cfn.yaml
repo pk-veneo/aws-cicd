@@ -1,0 +1,22 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Lambda function stack
+
+Parameters:
+  S3Bucket:
+    Type: String
+    Description: S3 bucket for Lambda code
+  LambdaRoleArn:
+    Type: String
+    Description: Lambda execution role ARN
+
+Resources:
+  MyEnterpriseLambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: MyEnterpriseLambda
+      Handler: lambda_function.lambda_handler
+      Role: !Ref LambdaRoleArn
+      Runtime: python3.11
+      Code:
+        S3Bucket: !Ref S3Bucket
+        S3Key: lambda.zip 
