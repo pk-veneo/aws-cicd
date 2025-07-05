@@ -13,6 +13,8 @@ jobs:
     runs-on: ubuntu-latest
 
     env:
+      AWS_DEFAULT_REGION: ap-south-1
+      AWS_REGION: ap-south-1
       DEV_ACCOUNT_ID: ${{ vars.DEV_ACCOUNT_ID }}
       DEV_ROLE: ${{ vars.DEV_ROLE }}
       DEV_BUCKET: ${{ vars.DEV_BUCKET }}
@@ -60,7 +62,7 @@ jobs:
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: arn:aws:iam::${{ env.ACCOUNT_ID }}:role/${{ env.GITHUB_ACTIONS_ROLE }}
-          aws-region: us-east-1
+          aws-region: ap-south-1
 
       - name: Upload Lambda package to S3
         run: |
