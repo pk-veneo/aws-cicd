@@ -10,7 +10,7 @@ This project demonstrates an enterprise-grade CI/CD pipeline from GitHub to AWS 
 
 ---
 
-## Step-by-Step Setup Lets check part 4
+## Step-by-Step Setup Lets check part 5
 
 ### 1. AWS Side
 

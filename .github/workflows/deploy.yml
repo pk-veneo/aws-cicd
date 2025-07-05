@@ -56,7 +56,9 @@ jobs:
 
       - name: Zip Lambda function
         run: |
-          zip lambda.zip lambda_function.py
+          cd src
+          zip -r ../lambda.zip .
+          cd ..
 
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
