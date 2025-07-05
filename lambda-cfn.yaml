@@ -8,6 +8,14 @@ Parameters:
   LambdaRoleArn:
     Type: String
     Description: Lambda execution role ARN
+  DeploymentTimestamp:
+    Type: String
+    Description: Timestamp to force updates
+    Default: "1"
+  S3Key:
+    Type: String
+    Description: S3 key for Lambda code
+    Default: "lambda.zip"
 
 Resources:
   MyEnterpriseLambda:
@@ -19,4 +27,7 @@ Resources:
       Runtime: python3.11
       Code:
         S3Bucket: !Ref S3Bucket
-        S3Key: lambda.zip 
+        S3Key: !Ref S3Key
+      Environment:
+        Variables:
+          DEPLOYMENT_TIMESTAMP: !Ref DeploymentTimestamp 

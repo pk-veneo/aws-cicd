@@ -54,6 +54,12 @@ jobs:
           # pytest or your test command
           echo "No tests implemented"
 
+      - name: Generate deployment version
+        id: version
+        run: |
+          echo "VERSION=$(date +%Y%m%d-%H%M%S)" >> $GITHUB_ENV
+          echo "S3_KEY=lambda-$(date +%Y%m%d-%H%M%S).zip" >> $GITHUB_ENV
+
       - name: Zip Lambda function
         run: |
           cd src
@@ -68,7 +74,11 @@ jobs:
 
       - name: Upload Lambda package to S3
         run: |
-          aws s3 cp lambda.zip s3://${{ env.LAMBDA_BUCKET }}/lambda.zip
+          aws s3 cp lambda.zip s3://${{ env.LAMBDA_BUCKET }}/${{ env.S3_KEY }}
+
+      - name: Clean up old Lambda packages (keep last 5)
+        run: |
+          aws s3 ls s3://${{ env.LAMBDA_BUCKET }}/lambda- | sort -r | tail -n +6 | awk '{print $4}' | xargs -I {} aws s3 rm s3://${{ env.LAMBDA_BUCKET }}/{} || true
 
       - name: Deploy/Update Lambda via CloudFormation
         run: |
@@ -76,4 +86,4 @@ jobs:
             --template-file lambda-cfn.yaml \
             --stack-name LambdaStack \
             --capabilities CAPABILITY_NAMED_IAM \
-            --parameter-overrides S3Bucket=${{ env.LAMBDA_BUCKET }} LambdaRoleArn=arn:aws:iam::${{ env.ACCOUNT_ID }}:role/LambdaExecutionRole 
+            --parameter-overrides S3Bucket=${{ env.LAMBDA_BUCKET }} LambdaRoleArn=arn:aws:iam::${{ env.ACCOUNT_ID }}:role/LambdaExecutionRole DeploymentTimestamp=${{ env.VERSION }} S3Key=${{ env.S3_KEY }} 
