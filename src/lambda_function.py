@@ -1,2 +1,2 @@
 def lambda_handler(event, context):
-    return {'statusCode': 200, 'body': 'Hello from Lambda part 1!'} 
+    return {'statusCode': 200, 'body': 'Hello from Lambda part 1, This cicd works!'} 
