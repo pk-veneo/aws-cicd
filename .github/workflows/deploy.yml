@@ -49,32 +49,17 @@ jobs:
           name: sam-build
           path: .aws-sam/
 
-  deploy:
+  deploy-dev:
     needs: test
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        include:
-          - branch: dev
-            environment: dev
-            account_id: ${{ vars.DEV_ACCOUNT_ID }}
-            role: ${{ vars.DEV_ROLE }}
-          - branch: qa
-            environment: qa
-            account_id: ${{ vars.QA_ACCOUNT_ID }}
-            role: ${{ vars.QA_ROLE }}
-          - branch: main
-            environment: prod
-            account_id: ${{ vars.PROD_ACCOUNT_ID }}
-            role: ${{ vars.PROD_ROLE }}
-    if: github.ref == 'refs/heads/${{ matrix.branch }}'
-    environment: ${{ matrix.environment }}
+    if: github.ref == 'refs/heads/dev'
+    environment: dev
     env:
       AWS_DEFAULT_REGION: ap-south-1
       AWS_REGION: ap-south-1
-      ACCOUNT_ID: ${{ matrix.account_id }}
-      GITHUB_ACTIONS_ROLE: ${{ matrix.role }}
-      ENVIRONMENT: ${{ matrix.environment }}
+      ACCOUNT_ID: ${{ vars.DEV_ACCOUNT_ID }}
+      GITHUB_ACTIONS_ROLE: ${{ vars.DEV_ROLE }}
+      ENVIRONMENT: dev
 
     steps:
       - name: Checkout code
@@ -108,7 +93,7 @@ jobs:
           sudo mv sam-installation/sam /usr/local/bin/sam
           sam --version
 
-      - name: Deploy to ${{ matrix.environment }}
+      - name: Deploy to dev
         run: |
           sam deploy \
             --template-file template.yaml \
@@ -119,28 +104,120 @@ jobs:
             --no-confirm-changeset \
             --no-fail-on-empty-changeset
 
-      - name: Test ${{ matrix.environment }} API
+      - name: Test dev API
         run: |
           API_URL=$(aws cloudformation describe-stacks \
             --stack-name ServerlessEnterpriseStack-${{ env.ENVIRONMENT }} \
             --query 'Stacks[0].Outputs[?OutputKey==`ApiGatewayUrl`].OutputValue' \
             --output text)
-          echo "${{ matrix.environment }} API Gateway URL: $API_URL"
+          echo "dev API Gateway URL: $API_URL"
           if [ ! -z "$API_URL" ]; then
             echo "Testing enterprise endpoint..."
-            curl -f "$API_URL/api/enterprise" || echo "${{ matrix.environment }} enterprise API test failed"
+            curl -f "$API_URL/api/enterprise" || echo "dev enterprise API test failed"
             echo "Testing workday endpoint..."
-            curl -f -X POST "$API_URL/api/workday" -H "Content-Type: application/json" -d '{"test": true}' || echo "${{ matrix.environment }} workday API test failed"
+            curl -f -X POST "$API_URL/api/workday" -H "Content-Type: application/json" -d '{"test": true}' || echo "dev workday API test failed"
           fi
 
       - name: Notify deployment success
         if: success()
         run: |
-          echo "✅ Successfully deployed to ${{ matrix.environment }} environment"
+          echo "✅ Successfully deployed to dev environment"
           echo "🌐 API URL: $API_URL"
 
       - name: Notify deployment failure
         if: failure()
         run: |
-          echo "❌ Deployment to ${{ matrix.environment }} failed"
-          echo "🔍 Check CloudWatch logs for details" 
+          echo "❌ Deployment to dev failed"
+          echo "🔍 Check CloudWatch logs for details"
+
+  deploy-qa:
+    needs: test
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/qa'
+    environment: qa
+    env:
+      AWS_DEFAULT_REGION: ap-south-1
+      AWS_REGION: ap-south-1
+      ACCOUNT_ID: ${{ vars.QA_ACCOUNT_ID }}
+      GITHUB_ACTIONS_ROLE: ${{ vars.QA_ROLE }}
+      ENVIRONMENT: qa
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: sam-build
+          path: .aws-sam/
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::${{ env.ACCOUNT_ID }}:role/${{ env.GITHUB_ACTIONS_ROLE }}
+          aws-region: ap-south-1
+
+      - name: Install AWS SAM CLI
+        run: |
+          curl -L https://github.com/aws/aws-sam-cli/releases/latest/download/sam-linux-x86_64.zip -o sam.zip
+          unzip sam.zip -d sam-installation
+          sudo mv sam-installation/sam /usr/local/bin/sam
+          sam --version
+
+      - name: Deploy to qa
+        run: |
+          sam deploy \
+            --template-file template.yaml \
+            --stack-name ServerlessEnterpriseStack-${{ env.ENVIRONMENT }} \
+            --capabilities CAPABILITY_NAMED_IAM \
+            --parameter-overrides \
+              Environment=${{ env.ENVIRONMENT }} \
+            --no-confirm-changeset \
+            --no-fail-on-empty-changeset
+
+  deploy-prod:
+    needs: test
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    environment: prod
+    env:
+      AWS_DEFAULT_REGION: ap-south-1
+      AWS_REGION: ap-south-1
+      ACCOUNT_ID: ${{ vars.PROD_ACCOUNT_ID }}
+      GITHUB_ACTIONS_ROLE: ${{ vars.PROD_ROLE }}
+      ENVIRONMENT: prod
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: sam-build
+          path: .aws-sam/
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::${{ env.ACCOUNT_ID }}:role/${{ env.GITHUB_ACTIONS_ROLE }}
+          aws-region: ap-south-1
+
+      - name: Install AWS SAM CLI
+        run: |
+          curl -L https://github.com/aws/aws-sam-cli/releases/latest/download/sam-linux-x86_64.zip -o sam.zip
+          unzip sam.zip -d sam-installation
+          sudo mv sam-installation/sam /usr/local/bin/sam
+          sam --version
+
+      - name: Deploy to prod
+        run: |
+          sam deploy \
+            --template-file template.yaml \
+            --stack-name ServerlessEnterpriseStack-${{ env.ENVIRONMENT }} \
+            --capabilities CAPABILITY_NAMED_IAM \
+            --parameter-overrides \
+              Environment=${{ env.ENVIRONMENT }} \
+            --no-confirm-changeset \
+            --no-fail-on-empty-changeset 
