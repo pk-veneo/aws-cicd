@@ -34,9 +34,8 @@ jobs:
 
       - name: Install AWS SAM CLI
         run: |
-          curl -L https://github.com/aws/aws-sam-cli/releases/latest/download/sam-linux-x86_64.zip -o sam.zip
-          unzip sam.zip -d sam-installation
-          sudo mv sam-installation/sam /usr/local/bin/sam
+          # Install SAM CLI using pip (more reliable)
+          pip install aws-sam-cli
           sam --version
 
       - name: Build SAM application
@@ -88,9 +87,8 @@ jobs:
 
       - name: Install AWS SAM CLI
         run: |
-          curl -L https://github.com/aws/aws-sam-cli/releases/latest/download/sam-linux-x86_64.zip -o sam.zip
-          unzip sam.zip -d sam-installation
-          sudo mv sam-installation/sam /usr/local/bin/sam
+          # Install SAM CLI using pip (more reliable)
+          pip install aws-sam-cli
           sam --version
 
       - name: Deploy to dev
@@ -160,9 +158,8 @@ jobs:
 
       - name: Install AWS SAM CLI
         run: |
-          curl -L https://github.com/aws/aws-sam-cli/releases/latest/download/sam-linux-x86_64.zip -o sam.zip
-          unzip sam.zip -d sam-installation
-          sudo mv sam-installation/sam /usr/local/bin/sam
+          # Install SAM CLI using pip (more reliable)
+          pip install aws-sam-cli
           sam --version
 
       - name: Deploy to qa
@@ -206,9 +203,8 @@ jobs:
 
       - name: Install AWS SAM CLI
         run: |
-          curl -L https://github.com/aws/aws-sam-cli/releases/latest/download/sam-linux-x86_64.zip -o sam.zip
-          unzip sam.zip -d sam-installation
-          sudo mv sam-installation/sam /usr/local/bin/sam
+          # Install SAM CLI using pip (more reliable)
+          pip install aws-sam-cli
           sam --version
 
       - name: Deploy to prod
