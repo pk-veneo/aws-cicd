@@ -1,0 +1,74 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Serverless Enterprise Lambda Application
+Parameters:
+  Environment:
+    Type: String
+    Description: Environment (dev, qa, prod)
+    Default: dev
+    AllowedValues:
+    - dev
+    - qa
+    - prod
+Globals:
+  Function:
+    Runtime: python3.10
+    Timeout: 30
+    MemorySize: 256
+    Environment:
+      Variables:
+        ENVIRONMENT:
+          Ref: Environment
+Resources:
+  MyEnterpriseLambda:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName:
+        Fn::Sub: MyEnterpriseLambda-${Environment}
+      Handler: lambda_function.lambda_handler
+      CodeUri: MyEnterpriseLambda
+      Events:
+        ApiEvent:
+          Type: Api
+          Properties:
+            Path: /api/enterprise
+            Method: get
+    Metadata:
+      SamResourceId: MyEnterpriseLambda
+  WorkdayAPILambda:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName:
+        Fn::Sub: WorkdayAPILambda-${Environment}
+      Handler: workday_api.lambda_handler
+      CodeUri: WorkdayAPILambda
+      Timeout: 60
+      MemorySize: 512
+      Environment:
+        Variables:
+          WORKDAY_API_ENABLED: 'true'
+      Events:
+        ApiEvent:
+          Type: Api
+          Properties:
+            Path: /api/workday
+            Method: post
+    Metadata:
+      SamResourceId: WorkdayAPILambda
+Outputs:
+  ApiGatewayUrl:
+    Description: API Gateway endpoint URL
+    Value:
+      Fn::Sub: https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/${Environment}/
+  MyEnterpriseLambdaArn:
+    Description: ARN of MyEnterpriseLambda function
+    Value:
+      Fn::GetAtt:
+      - MyEnterpriseLambda
+      - Arn
+  WorkdayAPILambdaArn:
+    Description: ARN of WorkdayAPILambda function
+    Value:
+      Fn::GetAtt:
+      - WorkdayAPILambda
+      - Arn

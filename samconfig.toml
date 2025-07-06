@@ -1,0 +1,12 @@
+version = 0.1
+
+[dev.deploy.parameters]
+stack_name = "ServerlessEnterpriseStack-dev"
+resolve_s3 = true
+s3_prefix = "ServerlessEnterpriseStack-dev"
+region = "ap-south-1"
+confirm_changeset = true
+capabilities = "CAPABILITY_NAMED_IAM"
+disable_rollback = true
+parameter_overrides = "Environment=\"dev\""
+image_repositories = []

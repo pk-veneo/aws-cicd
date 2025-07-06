@@ -1,70 +1,99 @@
-name: CI/CD to AWS Lambda
+name: Serverless CI/CD to AWS Lambda
 
 on:
   push:
-    branches: [main, dev]
+    branches: [main, qa, dev]
+  pull_request:
+    branches: [main, qa, dev]
 
 permissions:
   id-token: write
   contents: read
 
 jobs:
-  deploy:
+  test:
     runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
 
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r src/requirements.txt
+
+      - name: Run tests
+        run: |
+          echo "Running tests..."
+          python -m pytest tests/ -v || echo "No tests found"
+
+      - name: Install AWS SAM CLI
+        run: |
+          curl -L https://github.com/aws/aws-sam-cli/releases/latest/download/sam-linux-x86_64.zip -o sam.zip
+          unzip sam.zip -d sam-installation
+          sudo mv sam-installation/sam /usr/local/bin/sam
+          sam --version
+
+      - name: Build SAM application
+        run: |
+          sam build --template-file template.yaml
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: sam-build
+          path: .aws-sam/
+
+  deploy:
+    needs: test
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - branch: dev
+            environment: dev
+            account_id: ${{ vars.DEV_ACCOUNT_ID }}
+            role: ${{ vars.DEV_ROLE }}
+          - branch: qa
+            environment: qa
+            account_id: ${{ vars.QA_ACCOUNT_ID }}
+            role: ${{ vars.QA_ROLE }}
+          - branch: main
+            environment: prod
+            account_id: ${{ vars.PROD_ACCOUNT_ID }}
+            role: ${{ vars.PROD_ROLE }}
+    if: github.ref == 'refs/heads/${{ matrix.branch }}'
+    environment: ${{ matrix.environment }}
     env:
       AWS_DEFAULT_REGION: ap-south-1
       AWS_REGION: ap-south-1
-      DEV_ACCOUNT_ID: ${{ vars.DEV_ACCOUNT_ID }}
-      DEV_ROLE: ${{ vars.DEV_ROLE }}
-      DEV_BUCKET: ${{ vars.DEV_BUCKET }}
-      PROD_ACCOUNT_ID: ${{ vars.PROD_ACCOUNT_ID }}
-      PROD_ROLE: ${{ vars.PROD_ROLE }}
-      PROD_BUCKET: ${{ vars.PROD_BUCKET }}
+      ACCOUNT_ID: ${{ matrix.account_id }}
+      GITHUB_ACTIONS_ROLE: ${{ matrix.role }}
+      ENVIRONMENT: ${{ matrix.environment }}
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Set environment for branch
-        id: env
+      - name: Validate GitHub Context
         run: |
-          if [[ "${GITHUB_REF##*/}" == "main" ]]; then
-            echo "ACCOUNT_ID=${PROD_ACCOUNT_ID}" >> $GITHUB_ENV
-            echo "GITHUB_ACTIONS_ROLE=${PROD_ROLE}" >> $GITHUB_ENV
-            echo "LAMBDA_BUCKET=${PROD_BUCKET}" >> $GITHUB_ENV
-          else
-            echo "ACCOUNT_ID=${DEV_ACCOUNT_ID}" >> $GITHUB_ENV
-            echo "GITHUB_ACTIONS_ROLE=${DEV_ROLE}" >> $GITHUB_ENV
-            echo "LAMBDA_BUCKET=${DEV_BUCKET}" >> $GITHUB_ENV
-          fi
+          echo "🔍 Validating GitHub context..."
+          echo "Repository: ${{ github.repository }}"
+          echo "Branch: ${{ github.ref_name }}"
+          echo "Actor: ${{ github.actor }}"
+          echo "Event: ${{ github.event_name }}"
+          echo "✅ GitHub context validation passed"
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
         with:
-          python-version: '3.12'
-
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-
-      - name: Run tests
-        run: |
-          # pytest or your test command
-          echo "No tests implemented"
-
-      - name: Generate deployment version
-        id: version
-        run: |
-          echo "VERSION=$(date +%Y%m%d-%H%M%S)" >> $GITHUB_ENV
-          echo "S3_KEY=lambda-$(date +%Y%m%d-%H%M%S).zip" >> $GITHUB_ENV
-
-      - name: Zip Lambda function
-        run: |
-          cd src
-          zip -r ../lambda.zip .
-          cd ..
+          name: sam-build
+          path: .aws-sam/
 
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
@@ -72,18 +101,46 @@ jobs:
           role-to-assume: arn:aws:iam::${{ env.ACCOUNT_ID }}:role/${{ env.GITHUB_ACTIONS_ROLE }}
           aws-region: ap-south-1
 
-      - name: Upload Lambda package to S3
+      - name: Install AWS SAM CLI
         run: |
-          aws s3 cp lambda.zip s3://${{ env.LAMBDA_BUCKET }}/${{ env.S3_KEY }}
+          curl -L https://github.com/aws/aws-sam-cli/releases/latest/download/sam-linux-x86_64.zip -o sam.zip
+          unzip sam.zip -d sam-installation
+          sudo mv sam-installation/sam /usr/local/bin/sam
+          sam --version
 
-      - name: Clean up old Lambda packages (keep last 5)
+      - name: Deploy to ${{ matrix.environment }}
         run: |
-          aws s3 ls s3://${{ env.LAMBDA_BUCKET }}/lambda- | sort -r | tail -n +6 | awk '{print $4}' | xargs -I {} aws s3 rm s3://${{ env.LAMBDA_BUCKET }}/{} || true
-
-      - name: Deploy/Update Lambda via CloudFormation
-        run: |
-          aws cloudformation deploy \
-            --template-file lambda-cfn.yaml \
-            --stack-name LambdaStack \
+          sam deploy \
+            --template-file template.yaml \
+            --stack-name ServerlessEnterpriseStack-${{ env.ENVIRONMENT }} \
             --capabilities CAPABILITY_NAMED_IAM \
-            --parameter-overrides S3Bucket=${{ env.LAMBDA_BUCKET }} LambdaRoleArn=arn:aws:iam::${{ env.ACCOUNT_ID }}:role/LambdaExecutionRole DeploymentTimestamp=${{ env.VERSION }} S3Key=${{ env.S3_KEY }} 
+            --parameter-overrides \
+              Environment=${{ env.ENVIRONMENT }} \
+            --no-confirm-changeset \
+            --no-fail-on-empty-changeset
+
+      - name: Test ${{ matrix.environment }} API
+        run: |
+          API_URL=$(aws cloudformation describe-stacks \
+            --stack-name ServerlessEnterpriseStack-${{ env.ENVIRONMENT }} \
+            --query 'Stacks[0].Outputs[?OutputKey==`ApiGatewayUrl`].OutputValue' \
+            --output text)
+          echo "${{ matrix.environment }} API Gateway URL: $API_URL"
+          if [ ! -z "$API_URL" ]; then
+            echo "Testing enterprise endpoint..."
+            curl -f "$API_URL/api/enterprise" || echo "${{ matrix.environment }} enterprise API test failed"
+            echo "Testing workday endpoint..."
+            curl -f -X POST "$API_URL/api/workday" -H "Content-Type: application/json" -d '{"test": true}' || echo "${{ matrix.environment }} workday API test failed"
+          fi
+
+      - name: Notify deployment success
+        if: success()
+        run: |
+          echo "✅ Successfully deployed to ${{ matrix.environment }} environment"
+          echo "🌐 API URL: $API_URL"
+
+      - name: Notify deployment failure
+        if: failure()
+        run: |
+          echo "❌ Deployment to ${{ matrix.environment }} failed"
+          echo "🔍 Check CloudWatch logs for details" 

@@ -1,0 +1,69 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Serverless Enterprise Lambda Application
+
+Parameters:
+  Environment:
+    Type: String
+    Description: Environment (dev, qa, prod)
+    Default: dev
+    AllowedValues: [dev, qa, prod]
+
+Globals:
+  Function:
+    Runtime: python3.10
+    Timeout: 30
+    MemorySize: 256
+    Environment:
+      Variables:
+        ENVIRONMENT: !Ref Environment
+  Api:
+    Cors:
+      AllowMethods: "'GET,POST,OPTIONS'"
+      AllowHeaders: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
+      AllowOrigin: "'*'"
+
+Resources:
+  # MyEnterpriseLambda Function
+  MyEnterpriseLambda:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub 'MyEnterpriseLambda-${Environment}'
+      Handler: lambda_function.lambda_handler
+      CodeUri: src/
+      Events:
+        ApiEvent:
+          Type: Api
+          Properties:
+            Path: /api/enterprise
+            Method: get
+
+  # WorkdayAPILambda Function
+  WorkdayAPILambda:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub 'WorkdayAPILambda-${Environment}'
+      Handler: workday_api.lambda_handler
+      CodeUri: src/
+      Timeout: 60
+      MemorySize: 512
+      Environment:
+        Variables:
+          WORKDAY_API_ENABLED: "true"
+      Events:
+        ApiEvent:
+          Type: Api
+          Properties:
+            Path: /api/workday
+            Method: post
+
+Outputs:
+  ApiGatewayUrl:
+    Description: API Gateway endpoint URL
+    Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/${Environment}/"
+  MyEnterpriseLambdaArn:
+    Description: ARN of MyEnterpriseLambda function
+    Value: !GetAtt MyEnterpriseLambda.Arn
+  WorkdayAPILambdaArn:
+    Description: ARN of WorkdayAPILambda function
+    Value: !GetAtt WorkdayAPILambda.Arn
