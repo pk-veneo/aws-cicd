@@ -11,8 +11,17 @@ permissions:
   contents: read
 
 jobs:
-  test:
+  deploy-dev:
     runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/dev'
+    environment: dev
+    env:
+      AWS_DEFAULT_REGION: ap-south-1
+      AWS_REGION: ap-south-1
+      ACCOUNT_ID: ${{ vars.DEV_ACCOUNT_ID }}
+      GITHUB_ACTIONS_ROLE: ${{ vars.DEV_ROLE }}
+      ENVIRONMENT: dev
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -34,7 +43,6 @@ jobs:
 
       - name: Install AWS SAM CLI
         run: |
-          # Install SAM CLI using pip (more reliable)
           pip install aws-sam-cli
           sam --version
 
@@ -42,54 +50,11 @@ jobs:
         run: |
           sam build --template-file template.yaml
 
-      - name: Upload build artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: sam-build
-          path: .aws-sam/
-
-  deploy-dev:
-    needs: test
-    runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/dev'
-    environment: dev
-    env:
-      AWS_DEFAULT_REGION: ap-south-1
-      AWS_REGION: ap-south-1
-      ACCOUNT_ID: ${{ vars.DEV_ACCOUNT_ID }}
-      GITHUB_ACTIONS_ROLE: ${{ vars.DEV_ROLE }}
-      ENVIRONMENT: dev
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Validate GitHub Context
-        run: |
-          echo "🔍 Validating GitHub context..."
-          echo "Repository: ${{ github.repository }}"
-          echo "Branch: ${{ github.ref_name }}"
-          echo "Actor: ${{ github.actor }}"
-          echo "Event: ${{ github.event_name }}"
-          echo "✅ GitHub context validation passed"
-
-      - name: Download build artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: sam-build
-          path: .aws-sam/
-
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: arn:aws:iam::${{ env.ACCOUNT_ID }}:role/${{ env.GITHUB_ACTIONS_ROLE }}
           aws-region: ap-south-1
-
-      - name: Install AWS SAM CLI
-        run: |
-          # Install SAM CLI using pip (more reliable)
-          pip install aws-sam-cli
-          sam --version
 
       - name: Deploy to dev
         run: |
@@ -129,7 +94,6 @@ jobs:
           echo "🔍 Check CloudWatch logs for details"
 
   deploy-qa:
-    needs: test
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/qa'
     environment: qa
@@ -144,23 +108,30 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Download build artifacts
-        uses: actions/download-artifact@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
-          name: sam-build
-          path: .aws-sam/
+          python-version: '3.10'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r src/requirements.txt
+
+      - name: Install AWS SAM CLI
+        run: |
+          pip install aws-sam-cli
+          sam --version
+
+      - name: Build SAM application
+        run: |
+          sam build --template-file template.yaml
 
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: arn:aws:iam::${{ env.ACCOUNT_ID }}:role/${{ env.GITHUB_ACTIONS_ROLE }}
           aws-region: ap-south-1
-
-      - name: Install AWS SAM CLI
-        run: |
-          # Install SAM CLI using pip (more reliable)
-          pip install aws-sam-cli
-          sam --version
 
       - name: Deploy to qa
         run: |
@@ -174,7 +145,6 @@ jobs:
             --no-fail-on-empty-changeset
 
   deploy-prod:
-    needs: test
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main'
     environment: prod
@@ -189,23 +159,30 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Download build artifacts
-        uses: actions/download-artifact@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
-          name: sam-build
-          path: .aws-sam/
+          python-version: '3.10'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r src/requirements.txt
+
+      - name: Install AWS SAM CLI
+        run: |
+          pip install aws-sam-cli
+          sam --version
+
+      - name: Build SAM application
+        run: |
+          sam build --template-file template.yaml
 
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: arn:aws:iam::${{ env.ACCOUNT_ID }}:role/${{ env.GITHUB_ACTIONS_ROLE }}
           aws-region: ap-south-1
-
-      - name: Install AWS SAM CLI
-        run: |
-          # Install SAM CLI using pip (more reliable)
-          pip install aws-sam-cli
-          sam --version
 
       - name: Deploy to prod
         run: |
